@@ -7,9 +7,7 @@
 </head>
 <body>
   <h1>Book Explorer</h1>
-  <p>Search for books using the google books API and Gutendex API.</p>
-     <p> Books available on Gutendex can be downloaded for free (ex. Shakespeare).</p>
-    </p>Please note that Guteindex results may take longer to show up, thanks for your patience. </p>
+  <p>Search for books and explore options from Gutendex and Google Books APIs.</p>
 
   <div>
     <input type="text" id="searchInput" placeholder="Enter a keyword" />
@@ -25,94 +23,100 @@
       const query = document.getElementById('searchInput').value.trim();
       const resultsDiv = document.getElementById('results');
 
-      // Clear previous results
-      resultsDiv.innerHTML = '';
+      resultsDiv.innerHTML = ''; // Clear previous results
 
       if (!query) {
         resultsDiv.innerHTML = '<p>Please enter a keyword to search.</p>';
         return;
       }
 
-      // Start searching
-      searchGoogleBooks(query, resultsDiv);
+      // Show "Searching..." message
+      resultsDiv.innerHTML = '<p>Searching...</p>';
+
+      searchBooks(query, resultsDiv);
     });
 
-    async function searchGoogleBooks(query, resultsDiv) {
+    async function searchBooks(query, resultsDiv) {
+      const gutendexApiUrl = `https://gutendex.com/books/?search=${encodeURIComponent(query)}&page_size=10`;
       const googleApiUrl = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=10`;
 
       try {
-        const response = await fetch(googleApiUrl);
+        // Query both APIs simultaneously
+        const [gutendexResponse, googleResponse] = await Promise.all([
+          fetch(gutendexApiUrl),
+          fetch(googleApiUrl)
+        ]);
 
-        if (!response.ok) {
-          throw new Error(`Google Books API returned status ${response.status}`);
-        }
+        // Parse responses
+        const gutendexData = await gutendexResponse.json();
+        const googleData = await googleResponse.json();
 
-        const data = await response.json();
+        // Clear the "Searching..." message before displaying results
+        resultsDiv.innerHTML = '';
 
-        if (data.items) {
-          for (const book of data.items) {
-            const info = book.volumeInfo;
-            const bookElement = document.createElement('div');
-            bookElement.innerHTML = `
-              <h3>${info.title}</h3>
-              <p>Author(s): ${info.authors ? info.authors.join(', ') : 'Unknown'}</p>
-              <p>Description: ${info.description ? info.description.substring(0, 100) : 'No description available.'}...</p>
-              <a href="${info.infoLink}" target="_blank">More details</a>
-              <div id="gutendex-${book.id}"></div>
-              <hr>
+        // Global results counter
+        let displayedResults = 0;
+        const maxResults = 20;
+
+        // Display results from both APIs, up to the maxResults limit
+        const gutendexResults = gutendexData.results || [];
+        const googleResults = googleData.items || [];
+
+        for (let i = 0; i < Math.max(gutendexResults.length, googleResults.length); i++) {
+          if (displayedResults >= maxResults) break; // Stop if the maximum results limit is reached
+
+          const gutendexBook = gutendexResults[i];
+          const googleBook = googleResults[i]?.volumeInfo;
+
+          const bookElement = document.createElement('div');
+          bookElement.style.border = '1px solid #ccc';
+          bookElement.style.marginBottom = '10px';
+          bookElement.style.padding = '10px';
+
+          // Gutendex details
+          if (gutendexBook && displayedResults < maxResults) {
+            bookElement.innerHTML += `
+              <h3>${gutendexBook.title} (Gutendex)</h3>
+              <p><strong>Author(s):</strong> ${gutendexBook.authors.map(a => a.name).join(', ') || 'Unknown'}</p>
+              <p><strong>Subjects:</strong> ${gutendexBook.subjects.join(', ') || 'None'}</p>
+              <p><strong>Languages:</strong> ${gutendexBook.languages.join(', ')}</p>
+              <p><strong>Download:</strong> 
+                <a href="${gutendexBook.formats['text/plain']}" target="_blank">Text</a> |
+                <a href="${gutendexBook.formats['application/epub+zip']}" target="_blank">EPUB</a> |
+                <a href="${gutendexBook.formats['text/html']}" target="_blank">HTML</a>
+              </p>
             `;
-            resultsDiv.appendChild(bookElement);
-
-            // Search Gutendex for additional details
-            searchGutendex(info.title, `gutendex-${book.id}`);
+            displayedResults++;
           }
-        } else {
-          resultsDiv.innerHTML = '<p>No books found.</p>';
+
+          // Google Books details
+          if (googleBook && displayedResults < maxResults) {
+            bookElement.innerHTML += `
+              <h3>${googleBook.title || 'Unknown Title'} (Google Books)</h3>
+              <p><strong>Author(s):</strong> ${googleBook.authors ? googleBook.authors.join(', ') : 'Unknown'}</p>
+              <p><strong>Description:</strong> ${googleBook.description ? googleBook.description.substring(0, 100) : 'No description available.'}...</p>
+              <img src="${googleBook.imageLinks?.thumbnail || 'https://via.placeholder.com/120x160?text=No+Image'}" alt="${googleBook.title || 'No Image'} Cover">
+              <p><a href="${googleBook.infoLink}" target="_blank">More details</a></p>
+            `;
+            displayedResults++;
+          }
+
+          // Add the combined result to the main results container
+          if (bookElement.innerHTML) resultsDiv.appendChild(bookElement);
+        }
+
+        // If no results were displayed
+        if (displayedResults === 0) {
+          resultsDiv.innerHTML = '<p>No books found from either Gutendex or Google Books.</p>';
         }
       } catch (error) {
-        console.error('Error fetching data from Google Books API:', error);
-        resultsDiv.innerHTML = '<p>There was an error fetching results. Please try again later.</p>';
-      }
-    }
-
-    async function searchGutendex(title, containerId) {
-      const gutendexApiUrl = `https://gutendex.com/books/?search=${encodeURIComponent(title)}`;
-
-      try {
-        const response = await fetch(gutendexApiUrl);
-
-        if (!response.ok) {
-          throw new Error(`Gutendex API returned status ${response.status}`);
-        }
-
-        const data = await response.json();
-
-        if (data.results && data.results.length > 0) {
-          const book = data.results[0];
-          const gutendexElement = `
-            <p><strong>Gutendex Options:</strong></p>
-            <p>Subjects: ${book.subjects.join(', ') || 'None'}</p>
-            <p>Languages: ${book.languages.join(', ')}</p>
-            <p>Download: 
-              <a href="${book.formats['text/plain']}" target="_blank">Text</a> |
-              <a href="${book.formats['application/epub+zip']}" target="_blank">EPUB</a> |
-              <a href="${book.formats['text/html']}" target="_blank">HTML</a>
-            </p>
-          `;
-
-          document.getElementById(containerId).innerHTML = gutendexElement;
-        } else {
-          document.getElementById(containerId).innerHTML = '<p>No additional options available from Gutendex.</p>';
-        }
-      } catch (error) {
-        console.error('Error fetching data from Gutendex API:', error);
-        document.getElementById(containerId).innerHTML = '<p>Error fetching additional options.</p>';
+        console.error('Error fetching data from the APIs:', error);
+        resultsDiv.innerHTML = '<p>Error fetching results. Please try again later.</p>';
       }
     }
   </script>
 </body>
 </html>
-
 
 
 
