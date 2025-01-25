@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Book Explorer</title>
+</head>
+<body>
+  <h1>Book Explorer</h1>
+  <div>
+    <input type="text" id="searchInput" placeholder="Type a keyword to search for books..." />
+    <button onclick="searchBooks()">Search</button>
+  </div>
+  <div id="results">Enter a keyword in the search box above </div>
+
+  <script>
+    async function searchBooks() {
+      const query = document.getElementById('searchInput').value.trim();
+      const resultsDiv = document.getElementById('results');
+      resultsDiv.innerHTML = ''; // Clear previous results
+
+      if (!query) {
+        resultsDiv.innerHTML = '<p>Please enter a keyword to search.</p>';
+        return;
+      }
+
+      const API_URL = 'https://www.googleapis.com/books/v1/volumes';
+      try {
+        const response = await fetch(`${API_URL}?q=${encodeURIComponent(query)}&maxResults=20`);
+        const data = await response.json();
+
+        if (data.items) {
+          data.items.forEach(book => {
+            const bookInfo = book.volumeInfo;
+            const bookElement = document.createElement('div');
+            bookElement.innerHTML = `
+              <div>
+                <img src="${bookInfo.imageLinks?.thumbnail || 'https://via.placeholder.com/120x160?text=No+Image'}" alt="${bookInfo.title} Cover">
+                <h3>${bookInfo.title}</h3>
+                <p><strong>Author(s):</strong> ${bookInfo.authors?.join(', ') || 'Unknown'}</p>
+                <p><strong>Description:</strong> ${bookInfo.description?.substring(0, 150) || 'No description available.'}...</p>
+                <a href="${bookInfo.infoLink}" target="_blank" rel="noopener noreferrer">More Details</a>
+              </div>
+            `;
+            resultsDiv.appendChild(bookElement);
+          });
+        } else {
+          resultsDiv.innerHTML = '<p>No books found for your search.</p>';
+        }
+      } catch (error) {
+        resultsDiv.innerHTML = `<p>Error: ${error.message}</p>`;
+      }
+    }
+  </script>
+</body>
+</html>
+
+
+
+
